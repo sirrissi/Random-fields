@@ -1,0 +1,567 @@
+---
+title: "LK of Excursion sets"
+author: "Zinedine Bounnah"
+date: "2023-05-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(plotly)
+library(RandomFields)
+library(raster)
+library(RColorBrewer)
+library(plotly)
+library(stars)
+library(ggplot2)
+library(cowplot)
+
+```
+
+Simulation of a Gaussian random field :
+
+```{r}
+## define the locations:
+from <- 0
+to <- 2^8
+x.seq <- seq(from, to, by=0.75) 
+y.seq <- seq(from, to, by=0.75)
+
+
+# Simulate the random field
+rf=RFsimulate(RMexp(scale=sqrt(2/ka)), x=x.seq,y=y.seq)
+
+
+ka=(100/2^8)^2
+x.seq <- seq(from, to, by=0.75)
+y.seq <- seq(from, to, by=0.75)
+rf=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+
+# white/black color palette 
+pal <- colorRampPalette(c("white","black"))
+plot(raster::raster(rf),col=pal(7))
+
+```
+
+3D plot of the Gaussian Field
+
+```{r}
+##plot 3D
+df <- expand.grid(x = x.seq, y = y.seq)
+df$z <- rf@data[["variable1"]]
+
+plot=plot_ly() %>% 
+  add_trace(data = df,  x=df$x, y=df$y, z=df$z, type="mesh3d" ) %>%
+  layout(title = "Gaussian Field with covariance exp(-r²)") 
+
+plot
+```
+
+Chi 2 :
+
+```{r}
+
+
+x.seq <- seq(from, to, by=0.75)
+y.seq <- seq(from, to, by=0.75)
+  
+  
+# Simulate the random field
+rf=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf2=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+
+rf@data[["variable1"]]=rf@data[["variable1"]]^2+rf2@data[["variable1"]]^2
+rf@data[["variable1"]]=0.5*(rf@data[["variable1"]]-2)
+
+
+# Define color palette for plotting
+pal <- colorRampPalette(c("white", "black"))
+
+# Convert simulated random field to a raster object and plot it
+r <- raster(rf)
+
+plot(r, col = pal(7))
+
+
+```
+
+t field :
+
+```{r}
+k=4
+
+
+  
+x.seq <- seq(from, to, by=0.75) 
+y.seq <- seq(from, to, by=0.75)
+
+  
+rf=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf1=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf2=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf3=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf4=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+
+chi=rf1@data[["variable1"]]^2+rf2@data[["variable1"]]^2+rf3@data[["variable1"]]^2+rf4@data[["variable1"]]^2
+rf@data[["variable1"]]=(rf@data[["variable1"]])/sqrt(chi/4)
+rf@data[["variable1"]]=rf@data[["variable1"]]*sqrt(1/2)
+
+
+# Define color palette for plotting
+pal <- colorRampPalette(c("white", "black"))
+
+# Convert simulated random field to a raster object and plot it
+r <- raster(rf)
+plot(r, col = pal(50))
+
+```
+
+
+Function to get the excursion set at level u of a random field:
+
+```{r}
+Excursion_set=function(randomfield,level){
+  # Set the threshold
+  excursion_mask <- randomfield@data >= level
+  
+  # Create a copy of randomfield 
+  excursionset <- randomfield
+  
+  # Set values outside the excursion set to NA
+  excursionset@data[!excursion_mask] <- NA
+  
+  return(excursionset)
+}
+```
+
+Example and plots :
+
+```{r}
+## define the locations:
+from <- 0
+to <- 2^8
+x.seq <- seq(from, to, by=0.75) 
+y.seq <- seq(from, to, by=0.75) 
+
+
+# Simulate the random field
+rf=RFsimulate(RMexp(scale=sqrt(7)/ka), x=x.seq,y=y.seq)
+
+plot(raster(rf),col=pal(7))
+
+##PLOT WITHIN T 
+level=0
+# Convert it to a raster and plot
+excursionset=Excursion_set(rf,level)
+exc_raster=raster(excursionset)
+plot(exc_raster>=level,col=pal(2),legend=FALSE)
+
+
+##PLOT WITHIN T 
+level=1
+# Convert it to a raster and plot
+excursionset=Excursion_set(rf,level)
+exc_raster=raster(excursionset)
+plot(exc_raster>=level,col=pal(2),legend=FALSE)
+
+
+
+##PLOT WITHIN T 
+level=2
+# Convert it to a raster and plot
+excursionset=Excursion_set(rf,level)
+exc_raster=raster(excursionset)
+plot(exc_raster>=level,col=pal(2),ylim=c(0,2^8),legend=FALSE)
+
+
+
+
+
+##3D plot
+df <- expand.grid(x = x.seq, y = y.seq)
+df$z <- excursionset@data[["variable1"]]
+
+plot3d <- plot_ly(data = df, x = ~x, y = ~y, z = ~z, type = "mesh3d") %>%
+  layout(title = "Excursion set at level u=0",scene=list(zaxis = list(range = c(-4,4))))
+
+plot3d
+
+
+```
+
+
+
+```{r}
+
+
+Euler_charac2=function(randomfield,level){ ##randomfield class "RFspatialGridDataFrame"
+  
+  # Compute the excursion set
+  excursionset <- Excursion_set(randomfield,level)
+  excursionsett=st_as_stars(excursionset) >= level
+  
+  exc_sf <- st_as_sf(excursionsett, merge = TRUE)
+  connected_comp=nrow(exc_sf)
+  
+  # Set the threshold
+  inv_mask <- randomfield@data < level
+  # Create copy of the randomfield 
+  inv_exc <- randomfield
+  # Set values outside the complementary of the excursion set to NA
+  inv_exc@data[!inv_mask] <- NA
+  
+  invexc=st_as_stars(inv_exc) >= level
+  inv_sf <- st_as_sf(invexc, merge = TRUE)
+  holes=nrow(inv_sf)-1
+  
+  euler_characteristic=connected_comp - holes
+  
+  
+  return(list(eul=euler_characteristic, exc=excursionset,invexc=inv_exc))
+}
+```
+
+
+
+Area of the excursion set : Proportion of colored pixels \* area of the window We do it this way to allow a discretization of the interval that is not only xi=1,2..n
+
+```{r}
+Area_exc2=function(excursionset,level){ ##excursionset must be of class "RFspatialGridDataFrame", level is the level for the excursion set
+  
+  # Extract window size 
+  maxvalues=excursionset@grid@cellsize * (excursionset@grid@cells.dim-1) ##length of the axis
+  minvalues=excursionset@grid@cellcentre.offset ##where the window start
+  
+  # Total area
+  totarea=prod(maxvalues-minvalues) 
+  
+  
+  # Convert excursionset to a binary raster
+  excursionset=raster(excursionset)
+  excursionset=excursionset >= level
+  
+  # Convert logical to 0s and 1s 
+  binary_image <- as.integer(excursionset[] == TRUE)
+  
+  # Get the area by looking at the percentage of colored pixels in the image
+  proportion=sum(binary_image == 1, na.rm = TRUE) / length(binary_image) 
+  
+  area=proportion*totarea
+  
+  return(area)
+}
+```
+
+Perimeter
+
+Example of the process is shown later
+
+```{r}
+Perim_exc=function(excursionset,level){ ##randomfield must be of class "RFspatialGridDataFrame", level is the level for the excursion set
+  ## Convert excursionset to a binary stars
+  excursionsett=st_as_stars(excursionset)>=level
+  
+  ## Now convert to sf class
+  exc_sf=st_as_sf(excursionsett,merge=TRUE)
+  
+  ## Compute the perimeter using st_length function. we use st_cast() with parameter "MULTILINESTRING" for the function to work properly
+  perimeter=sum(st_length(st_cast(exc_sf,"MULTILINESTRING")))
+  
+  
+  return(perimeter)
+}
+```
+
+
+```{r}
+from <- 0
+to <- 2^8
+ka <- (100/2^8)^2
+x.seq <- seq(from, to, by=1)
+y.seq <- seq(from, to, by=1)
+rf <- RFsimulate(RMexp(scale=sqrt(2)/ka), x = x.seq, y = y.seq)
+
+
+level <- 1
+excursionset <- Excursion_set(rf, level)
+excursionsett <- st_as_stars(excursionset) >= level
+
+exc_sf <- st_as_sf(excursionsett, merge = TRUE)
+merged <- st_cast(exc_sf, "MULTILINESTRING")
+
+plot(excursionsett, main = NULL, breaks = "equal")
+graphics::plot(exc_sf, main = NULL)
+graphics::plot(merged, main = NULL)
+
+```
+
+All lipschitz killing together :
+
+```{r}
+LipschitzKilling=function(randomfield,level){
+  excursionset=Excursion_set(randomfield,level)
+  L0=Euler_charac2(randomfield,level)
+  L1=Perim_exc(excursionset,level)/2
+  L2=Area_exc2(excursionset,level)
+  return(list(L0=L0$eul, L1=L1,L2=L2))
+}
+```
+
+
+Monte Carlo
+
+```{r}
+MCLK=function(n,from,to,level,model,ka=1) {
+
+  
+L0s=numeric(n)
+L1s=numeric(n)
+L2s=numeric(n)
+
+for(i in 1:n){
+    ## define the locations:
+
+
+
+# Simulate the random field
+if(model=="Gaussian"){
+x.seq <- seq(from, to, by=1)
+y.seq <- seq(from, to, by=1)
+  rf=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+}
+if(model=="chi"){
+x.seq <- seq(from, to, by=1)
+y.seq <- seq(from, to, by=1)
+  
+  
+# Simulate the random field
+rf=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf2=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+
+rf@data[["variable1"]]=rf@data[["variable1"]]^2+rf2@data[["variable1"]]^2
+rf@data[["variable1"]]=0.5*(rf@data[["variable1"]]-2)
+}
+if(model=='t'){
+  
+x.seq <- seq(from, to, by=1) 
+y.seq <- seq(from, to, by=1)
+
+  
+rf=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf1=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf2=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf3=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+rf4=RFsimulate(RMexp(scale=sqrt(2)/ka), x=x.seq,y=y.seq)
+
+chi=rf1@data[["variable1"]]^2+rf2@data[["variable1"]]^2+rf3@data[["variable1"]]^2+rf4@data[["variable1"]]^2
+rf@data[["variable1"]]=(rf@data[["variable1"]])/sqrt(chi/4)
+rf@data[["variable1"]]=rf@data[["variable1"]]*sqrt(1/2)
+}
+
+LK=LipschitzKilling(rf,level)
+L0s[i]=LK$L0[1]
+L1s[i]=LK$L1[1]
+L2s[i]=LK$L2[1]
+}
+
+L0=mean(L0s)
+L0CI=list(-1.96*sd(L0s)/sqrt(n),1.96*sd(L0s)/sqrt(n))
+L1=mean(L1s)
+L1CI=list(-1.96*sd(L1s)/sqrt(n),1.96*sd(L1s)/sqrt(n))
+L2=mean(L2s)
+L2CI=list(-1.96*sd(L2s)/sqrt(n),1.96*sd(L2s)/sqrt(n))
+return(list(L0,L1,L2,L0CI,L1CI,L2CI))
+}
+
+LKD=function(MC,lk1,lk2,lk3){
+L0S=numeric(length(MC))
+L1S=numeric(length(MC))
+L2S=numeric(length(MC))
+lowery=numeric(length(MC))
+uppery=numeric(length(MC))
+lowerz=numeric(length(MC))
+upperz=numeric(length(MC))
+lowert=numeric(length(MC))
+uppert=numeric(length(MC))
+for(i in 1:length(MC)){
+  L0S[i]=MC[[i]][[1]]/(to*to)
+  L1S[i]=MC[[i]][[2]]/(to*to)
+  L2S[i]=MC[[i]][[3]]/(to*to)
+  lowery[i]=MC[[i]][[4]][[1]]/(to*to)
+  uppery[i]=MC[[i]][[4]][[2]]/(to*to)
+  lowerz[i]=MC[[i]][[5]][[1]]/(to*to)
+  upperz[i]=MC[[i]][[5]][[2]]/(to*to)
+  lowert[i]=MC[[i]][[6]][[1]]/(to*to)
+  uppert[i]=MC[[i]][[6]][[2]]/(to*to)
+}
+
+data=data.frame(u=levels,L0=L0S,L1=L1S,L2=L2S,lowery=lowery,uppery=uppery,lowerz=lowerz,upperz=upperz,lowert=lowert,uppert=uppert)
+
+
+par(mfrow=c(2,3), oma=c(0,0,2,0));
+
+p1=ggplot(data, aes(u, L0)) +
+ geom_point(shape=1) +
+  geom_errorbar(
+    aes(ymin = L0S+lowery, ymax = L0S+uppery),
+    width = 0.3,colour="red") +
+    geom_function(fun = lk1)
+
+p2=ggplot(data, aes(u, L1)) +
+ geom_point(shape=1) +
+  geom_errorbar(
+    aes(ymin = L1S+lowerz, ymax = L1S+upperz),
+    width = 0.3,colour="red") +
+    geom_function(fun = lk2)
+
+p3=ggplot(data, aes(u, L2)) +
+ geom_point(shape=1) +
+  geom_errorbar(
+    aes(ymin = L2S+lowert, ymax = L2S+uppert),
+    width = 0.3,colour="red") +
+    geom_function(fun = lk3)
+
+
+
+##unbiased
+
+L0s=numeric(length(MC))
+L1s=numeric(length(MC))
+L2s=numeric(length(MC))
+lowery=numeric(length(MC))
+uppery=numeric(length(MC))
+lowerz=numeric(length(MC))
+upperz=numeric(length(MC))
+lowert=numeric(length(MC))
+uppert=numeric(length(MC))
+for(i in 1:length(MC)){
+  L0s[i]=MC[[i]][[1]]/(to*to)-(to*4)*(MC[[i]][[2]]/(to*to))/(pi*to*to)+((to*4)^2/(2*pi*(to*to)^2) -1/(to*to) )*(MC[[i]][[3]]/(to*to))
+  L1s[i]=MC[[i]][[2]]/(to*to)-(to*4)*(MC[[i]][[3]]/(to*to))/(2*to*to)
+  L2s[i]=MC[[i]][[3]]/(to*to)
+  lowery[i]=MC[[i]][[4]][[1]]/(to*to)
+  uppery[i]=MC[[i]][[4]][[2]]/(to*to)
+  lowerz[i]=MC[[i]][[5]][[1]]/(to*to)
+  upperz[i]=MC[[i]][[5]][[2]]/(to*to)
+  lowert[i]=MC[[i]][[6]][[1]]/(to*to)
+  uppert[i]=MC[[i]][[6]][[2]]/(to*to)
+  
+}
+data=data.frame(u=levels,L0=L0s,L1=L1s,L2=L2s,lowery=lowery,uppery=uppery,lowerz=lowerz,upperz=upperz,lowert=lowert,uppert=uppert)
+
+par(mfrow=c(2,3), oma=c(0,0,2,0));
+
+p4=ggplot(data, aes(u, L0)) +
+ geom_point(shape=1) +
+  geom_errorbar(
+    aes(ymin = L0s+lowery, ymax = L0s+uppery),
+    width = 0.3,
+    position=position_dodge(width=.2),colour="red") +
+    geom_function(fun = lk1)
+
+p5=ggplot(data, aes(u, L1)) +
+ geom_point(shape=1) +
+  geom_errorbar(
+    aes(ymin = L1s+lowerz, ymax = L1s+upperz),
+    width = 0.3,
+    position=position_dodge(width=.2),colour="red") +
+    geom_function(fun = lk2)
+
+p6=ggplot(data, aes(u, L2)) +
+ geom_point(shape=1) +
+  geom_errorbar(
+    aes(ymin = L2s+lowert, ymax = L2s+uppert),
+    width = 0.3,
+    position=position_dodge(width=.2),colour="red") +
+    geom_function(fun = lk3)
+
+
+plot_grid(p1,p2,p3,p4,p5,p6)
+  
+}
+
+
+```
+
+
+Gaussian exp(-ka r²)
+```{r}
+n=2
+ka=(100/2^8)^2
+from=0
+to=2^8
+levels=seq(-5,5,by=0.5)
+
+lk1=function(u){
+  (2*pi)^(-3/2) * 2 * ka * u * exp(-u^2/2)
+}
+lk2=function(u){
+  (0.25*sqrt(2 * ka)*exp(-u^2/2))
+}
+lk3=function(u){
+  (1-pnorm(u))
+}
+
+MC=apply(as.matrix(levels),1,MCLK,from=from,to=to,n=n,model="Gaussian",ka=ka) #n=1 just for testing since the computation for a large n can take quite some time
+
+
+LKD(MC,lk1,lk2,lk3)
+
+```
+
+
+Chi
+exp -ka
+```{r}
+ka=(100/2^8)^2
+from=0
+to=2^8
+levels=seq(-0.5,5,by=0.5)
+levels=c(-0.75,levels) 
+MC=apply(as.matrix(levels),1,MCLK,from=from,to=to,n=10,model="chi",ka=ka) #n=5 just for testing since the computation for a large n can take quite some time
+
+lk1=function(u){
+ 2*ka*(u*2+1)*exp(-(u*2+2)/2)/(pi*2*gamma(1))
+}
+lk2=function(u){
+  sqrt(pi*2*ka)*(2+u*2)^(0.5)*exp(-(2+u*2)/2)/(2^(3/2)*gamma(1))
+}
+lk3=function(u){
+  1-pchisq(2+u*2,df=2)
+}
+
+LKD(MC,lk1,lk2,lk3)
+
+```
+
+
+t
+```{r}
+ka=(100/2^7)^2
+from=0
+to=2^7
+levels=seq(-15,15,by=1)
+start_time = Sys.time()
+MC=apply(as.matrix(levels),1,MCLK,from=from,to=to,n=2,model="t",ka=ka) #n=5 just for testing since the computation for a large n can take quite some time
+
+lk1=function(u){
+ (6*ka)/(4*pi^(3/2))*u/sqrt(2)*gamma(3/2)/gamma(2)*(1+u^2/2)^(-3/2)
+}
+lk2=function(u){
+  sqrt(2*ka)/4*(1+u^2/2)^(-3/2)
+}
+lk3=function(u){
+  1-pt(u*sqrt(3),df=4)
+}
+
+LKD(MC,lk1,lk2,lk3)
+
+
+```
+
+
+
+
+
